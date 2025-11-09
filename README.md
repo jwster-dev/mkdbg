@@ -155,6 +155,7 @@ mkdbg doctor
 mkdbg build
 mkdbg flash
 mkdbg attach
+mkdbg attach --break main --command continue --command bt --batch
 mkdbg snapshot --port /dev/cu.usbmodemXXXX
 mkdbg hil --port /dev/cu.usbmodemXXXX
 mkdbg repo add tahoe --path ../TahoeOS --build-cmd "make -j4"
@@ -174,7 +175,6 @@ tools/vm32 profile-compare --baseline logs/profile_a.log --candidate logs/profil
 bash tools/hil_gate.sh --port /dev/cu.usbmodemXXXX
 python3 tools/regression_summary.py --output build/regression_summary.json
 ```
-
 Hardware gate default pipeline:
 
 ```text

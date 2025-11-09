@@ -7,6 +7,7 @@ VERSION_OUT="${TMP_DIR}/version.out"
 DOCTOR_OUT="${TMP_DIR}/doctor.out"
 LIST_OUT="${TMP_DIR}/list.out"
 ATTACH_OUT="${TMP_DIR}/attach.out"
+ATTACH_ERR="${TMP_DIR}/attach.err"
 RUN_OUT="${TMP_DIR}/run.out"
 BIN_DIR="${TMP_DIR}/bin"
 
@@ -71,7 +72,12 @@ for item in checks:
         raise SystemExit(f"missing expected doctor output: {item}")
 PY
 
-PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" attach --dry-run > "${ATTACH_OUT}"
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" attach \
+  --dry-run \
+  --break main \
+  --command continue \
+  --command bt \
+  --batch > "${ATTACH_OUT}"
 python3 - "${ATTACH_OUT}" <<'PY'
 import sys
 from pathlib import Path
@@ -82,10 +88,32 @@ checks = [
     "[mkdbg] openocd=openocd -f ",
     "[mkdbg] gdb=arm-none-eabi-gdb ",
     "MicroKernel_MPU.elf",
+    "-batch",
+    "-ex 'break main'",
+    "-ex continue",
+    "-ex bt",
 ]
 for item in checks:
     if item not in text:
         raise SystemExit(f"missing expected attach output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" repo add tahoe \
+  --path . \
+  --attach-cmd "gdb build/tahoe.elf" >/dev/null
+if PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" attach tahoe --dry-run --break main > /dev/null 2> "${ATTACH_ERR}"; then
+  echo "mkdbg_host_tests: expected attach_cmd override to reject scripted flags" >&2
+  exit 1
+fi
+
+python3 - "${ATTACH_ERR}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+needle = "attach_cmd cannot be combined with --break, --command, or --batch"
+if needle not in text:
+    raise SystemExit(f"missing expected error text: {needle}")
 PY
 
 PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" repo add demo \
