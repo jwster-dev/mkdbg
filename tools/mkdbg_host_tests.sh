@@ -6,6 +6,7 @@ TMP_DIR="$(mktemp -d)"
 VERSION_OUT="${TMP_DIR}/version.out"
 DOCTOR_OUT="${TMP_DIR}/doctor.out"
 LIST_OUT="${TMP_DIR}/list.out"
+TARGET_LIST_OUT="${TMP_DIR}/target_list.out"
 ATTACH_OUT="${TMP_DIR}/attach.out"
 ATTACH_ERR="${TMP_DIR}/attach.err"
 RUN_OUT="${TMP_DIR}/run.out"
@@ -47,7 +48,7 @@ PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" init \
   --name microkernel \
   --port /dev/ttyACM0 >/dev/null
 
-PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" doctor > "${DOCTOR_OUT}"
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" doctor --target microkernel > "${DOCTOR_OUT}"
 python3 - "${DOCTOR_OUT}" <<'PY'
 import sys
 from pathlib import Path
@@ -73,6 +74,7 @@ for item in checks:
 PY
 
 PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" attach \
+  --target microkernel \
   --dry-run \
   --break main \
   --command continue \
@@ -98,7 +100,7 @@ for item in checks:
         raise SystemExit(f"missing expected attach output: {item}")
 PY
 
-PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" repo add tahoe \
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" target add tahoe \
   --path . \
   --attach-cmd "gdb build/tahoe.elf" >/dev/null
 if PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" attach tahoe --dry-run --break main > /dev/null 2> "${ATTACH_ERR}"; then
@@ -116,7 +118,7 @@ if needle not in text:
     raise SystemExit(f"missing expected error text: {needle}")
 PY
 
-PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" repo add demo \
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" target add demo \
   --path . \
   --preset generic \
   --build-cmd "echo build" \
@@ -138,7 +140,23 @@ for item in checks:
         raise SystemExit(f"missing expected repo list output: {item}")
 PY
 
-PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" run --repo demo --dry-run -- echo smoke > "${RUN_OUT}"
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" target use microkernel > /dev/null
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" target list > "${TARGET_LIST_OUT}"
+python3 - "${TARGET_LIST_OUT}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+checks = [
+    "* microkernel\tpreset=microkernel-mpu\tpath=",
+    "  demo\tpreset=generic\tpath=",
+]
+for item in checks:
+    if item not in text:
+        raise SystemExit(f"missing expected target list output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" run --target demo --dry-run -- echo smoke > "${RUN_OUT}"
 python3 - "${RUN_OUT}" <<'PY'
 import sys
 from pathlib import Path

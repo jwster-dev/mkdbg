@@ -316,6 +316,37 @@ def cmd_repo_list(args: argparse.Namespace) -> int:
   return 0
 
 
+def cmd_repo_use(args: argparse.Namespace) -> int:
+  config_path = require_config(Path.cwd())
+  data = load_config(config_path)
+  if args.name not in data["repos"]:
+    die(f"repo `{args.name}` not found in {config_path}")
+  data["default_repo"] = args.name
+  save_config(config_path, data)
+  print(f"default repo: {args.name}")
+  return 0
+
+
+def resolve_repo_arg(args: argparse.Namespace) -> str | None:
+  repo_name = getattr(args, "repo", None)
+  target_name = getattr(args, "target", None)
+  if repo_name is not None and target_name is not None:
+    die("pass either a repo name or --target, not both")
+  return target_name if target_name is not None else repo_name
+
+
+def cmd_target_add(args: argparse.Namespace) -> int:
+  return cmd_repo_add(args)
+
+
+def cmd_target_list(args: argparse.Namespace) -> int:
+  return cmd_repo_list(args)
+
+
+def cmd_target_use(args: argparse.Namespace) -> int:
+  return cmd_repo_use(args)
+
+
 def repo_uses_default_attach_flow(repo: dict[str, str]) -> bool:
   if repo.get("attach_cmd"):
     return False
@@ -327,7 +358,7 @@ def repo_uses_default_attach_flow(repo: dict[str, str]) -> bool:
 def cmd_doctor(args: argparse.Namespace) -> int:
   config_path = require_config(Path.cwd())
   data = load_config(config_path)
-  repo_name, repo, repo_root = resolve_repo(config_path, data, args.repo)
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
   port = args.port or repo.get("port")
   ctx = build_context(repo_name, repo, repo_root, port)
   checks: list[tuple[bool, str, str]] = []
@@ -369,7 +400,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def run_configured_action(args: argparse.Namespace, field: str, needs_port: bool) -> int:
   config_path = require_config(Path.cwd())
   data = load_config(config_path)
-  repo_name, repo, repo_root = resolve_repo(config_path, data, getattr(args, "repo", None))
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
   port = pick_port(repo, args.port) if needs_port else (args.port or repo.get("port"))
   ctx = build_context(repo_name, repo, repo_root, port)
   template = repo.get(field)
@@ -382,7 +413,7 @@ def run_configured_action(args: argparse.Namespace, field: str, needs_port: bool
 def cmd_run(args: argparse.Namespace) -> int:
   config_path = require_config(Path.cwd())
   data = load_config(config_path)
-  repo_name, repo, repo_root = resolve_repo(config_path, data, args.repo)
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
   command_parts = list(args.command)
   if command_parts and command_parts[0] == "--":
     command_parts = command_parts[1:]
@@ -407,7 +438,7 @@ def terminate_process(proc: subprocess.Popen[str]) -> None:
 def cmd_attach(args: argparse.Namespace) -> int:
   config_path = require_config(Path.cwd())
   data = load_config(config_path)
-  repo_name, repo, repo_root = resolve_repo(config_path, data, args.repo)
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
   ctx = build_context(repo_name, repo, repo_root, args.port or repo.get("port"))
 
   attach_cmd = repo.get("attach_cmd")
@@ -502,8 +533,45 @@ def build_parser() -> argparse.ArgumentParser:
   p_repo_list = repo_sub.add_parser("list", help="list repos from config")
   p_repo_list.set_defaults(func=cmd_repo_list)
 
+  p_repo_use = repo_sub.add_parser("use", help="set the default repo")
+  p_repo_use.add_argument("name", help="repo name to make default")
+  p_repo_use.set_defaults(func=cmd_repo_use)
+
+  p_target = sub.add_parser("target", help="manage target aliases for repo definitions")
+  target_sub = p_target.add_subparsers(dest="target_cmd", required=True)
+
+  p_target_add = target_sub.add_parser("add", help="add or update one target alias")
+  p_target_add.add_argument("name", help="logical target name")
+  p_target_add.add_argument("--path", required=True, help="target checkout path")
+  p_target_add.add_argument("--preset",
+                            choices=(PRESET_MICROKERNEL, PRESET_GENERIC),
+                            default=PRESET_GENERIC,
+                            help="seed command defaults")
+  p_target_add.add_argument("--default", action="store_true", help="make this the default target")
+  p_target_add.add_argument("--port")
+  p_target_add.add_argument("--build-cmd")
+  p_target_add.add_argument("--flash-cmd")
+  p_target_add.add_argument("--hil-cmd")
+  p_target_add.add_argument("--snapshot-cmd")
+  p_target_add.add_argument("--attach-cmd")
+  p_target_add.add_argument("--elf-path")
+  p_target_add.add_argument("--snapshot-output")
+  p_target_add.add_argument("--openocd-cfg")
+  p_target_add.add_argument("--openocd-server-cmd")
+  p_target_add.add_argument("--gdb")
+  p_target_add.add_argument("--gdb-target")
+  p_target_add.set_defaults(func=cmd_target_add)
+
+  p_target_list = target_sub.add_parser("list", help="list target aliases from config")
+  p_target_list.set_defaults(func=cmd_target_list)
+
+  p_target_use = target_sub.add_parser("use", help="set the default target alias")
+  p_target_use.add_argument("name", help="target name to make default")
+  p_target_use.set_defaults(func=cmd_target_use)
+
   p_doctor = sub.add_parser("doctor", help="check repo debug prerequisites")
   p_doctor.add_argument("repo", nargs="?", help="repo name (default: config default_repo)")
+  p_doctor.add_argument("--target", help="target alias (same as repo name)")
   p_doctor.add_argument("--port", help="override serial port for command/template checks")
   p_doctor.set_defaults(func=cmd_doctor)
 
@@ -515,12 +583,14 @@ def build_parser() -> argparse.ArgumentParser:
   ):
     cmd = sub.add_parser(name, help=f"run repo `{name}` command")
     cmd.add_argument("repo", nargs="?", help="repo name (default: config default_repo)")
+    cmd.add_argument("--target", help="target alias (same as repo name)")
     cmd.add_argument("--port", help="override serial port")
     cmd.add_argument("--dry-run", action="store_true", help="print command without running it")
     cmd.set_defaults(func=lambda args, f=field, p=needs_port: run_configured_action(args, f, p))
 
   p_attach = sub.add_parser("attach", help="launch a debug session")
   p_attach.add_argument("repo", nargs="?", help="repo name (default: config default_repo)")
+  p_attach.add_argument("--target", help="target alias (same as repo name)")
   p_attach.add_argument("--port", help="optional serial override for templates")
   p_attach.add_argument("--break",
                         dest="breakpoints",
@@ -546,6 +616,7 @@ def build_parser() -> argparse.ArgumentParser:
 
   p_run = sub.add_parser("run", help="run an arbitrary repo-local command")
   p_run.add_argument("--repo", help="repo name (default: config default_repo)")
+  p_run.add_argument("--target", help="target alias (same as repo name)")
   p_run.add_argument("--port", help="optional serial override for templates")
   p_run.add_argument("--dry-run", action="store_true", help="print command without running it")
   p_run.add_argument("command", nargs=argparse.REMAINDER, help="command to run after `--`")

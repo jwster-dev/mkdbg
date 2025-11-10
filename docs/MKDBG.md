@@ -8,7 +8,7 @@ It is intentionally not a replacement for GDB. The goal is to make
 common embedded flows feel like a single operator-facing CLI:
 
 - initialize one local config
-- register one or more repos
+- register one or more repos or target aliases
 - build / flash / attach / snapshot / run HIL
 - keep repo-specific commands in configuration instead of shell history
 
@@ -76,6 +76,16 @@ mkdbg hil tahoe --port /dev/cu.usbmodem21303
 mkdbg run --repo tahoe -- make test
 ```
 
+`target` is a user-facing alias for the same stored repo definitions:
+
+```bash
+mkdbg target add tahoe --path ../TahoeOS --build-cmd "make -j4"
+mkdbg target list
+mkdbg target use tahoe
+mkdbg build --target tahoe
+mkdbg run --target tahoe -- make test
+```
+
 ## Config
 
 `mkdbg` searches upward from the current working directory for
@@ -121,6 +131,10 @@ Current MVP supports:
 - `mkdbg doctor`
 - `mkdbg repo add`
 - `mkdbg repo list`
+- `mkdbg repo use`
+- `mkdbg target add`
+- `mkdbg target list`
+- `mkdbg target use`
 - `mkdbg build`
 - `mkdbg flash`
 - `mkdbg hil`
