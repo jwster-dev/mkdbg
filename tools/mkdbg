@@ -211,6 +211,10 @@ def format_command(template: str, ctx: dict[str, str]) -> str:
     die(f"missing template value `{exc.args[0]}` for command `{template}`")
 
 
+def shell_join(parts: list[str]) -> str:
+  return " ".join(shlex.quote(part) for part in parts)
+
+
 def run_shell(command: str, cwd: Path, dry_run: bool) -> int:
   print(f"[mkdbg] cwd={cwd}")
   print(f"[mkdbg] cmd={command}")
@@ -488,6 +492,47 @@ def cmd_attach(args: argparse.Namespace) -> int:
   return rc
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+  config_path = require_config(Path.cwd())
+  data = load_config(config_path)
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
+  script_path = repo_root / "tools" / "bringup_ui.py"
+
+  if not script_path.exists():
+    die(f"repo `{repo_name}` has no dashboard script: {script_path}")
+  if args.bundle_json is not None and args.source_log is not None:
+    die("watch accepts at most one of --bundle-json or --source-log")
+  if (args.bundle_json is not None or args.source_log is not None) and args.port is not None:
+    die("watch cannot combine --port with --bundle-json or --source-log")
+
+  command_parts = [sys.executable, str(script_path)]
+  if args.bundle_json is not None:
+    command_parts.extend(["--bundle-json", format_path(repo_root, args.bundle_json)])
+  elif args.source_log is not None:
+    command_parts.extend(["--source-log", format_path(repo_root, args.source_log)])
+  else:
+    command_parts.extend(["--port", pick_port(repo, args.port)])
+
+  if args.baud is not None:
+    command_parts.extend(["--baud", str(args.baud)])
+  if args.char_delay_ms is not None:
+    command_parts.extend(["--char-delay-ms", str(args.char_delay_ms)])
+  if args.snapshot_timeout_s is not None:
+    command_parts.extend(["--snapshot-timeout-s", str(args.snapshot_timeout_s)])
+  if args.auto_refresh_s is not None:
+    command_parts.extend(["--auto-refresh-s", str(args.auto_refresh_s)])
+  if args.target_driver is not None:
+    command_parts.extend(["--target-driver", args.target_driver])
+  if args.render_once:
+    command_parts.append("--render-once")
+  if args.width is not None:
+    command_parts.extend(["--width", str(args.width)])
+  if args.height is not None:
+    command_parts.extend(["--height", str(args.height)])
+
+  return run_shell(shell_join(command_parts), repo_root, args.dry_run)
+
+
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(
       description="mkdbg: repo-aware embedded debug and HIL orchestration CLI",
@@ -621,6 +666,23 @@ def build_parser() -> argparse.ArgumentParser:
   p_run.add_argument("--dry-run", action="store_true", help="print command without running it")
   p_run.add_argument("command", nargs=argparse.REMAINDER, help="command to run after `--`")
   p_run.set_defaults(func=cmd_run)
+
+  p_watch = sub.add_parser("watch", help="open the terminal dashboard for bringup and fault triage")
+  p_watch.add_argument("repo", nargs="?", help="repo name (default: config default_repo)")
+  p_watch.add_argument("--target", help="target alias (same as repo name)")
+  p_watch.add_argument("--port", help="override serial port for live capture")
+  p_watch.add_argument("--bundle-json", help="existing triage bundle json path")
+  p_watch.add_argument("--source-log", help="existing snapshot/bringup log path")
+  p_watch.add_argument("--baud", type=int, help="UART baud rate")
+  p_watch.add_argument("--char-delay-ms", type=float, help="per-char TX delay in ms")
+  p_watch.add_argument("--snapshot-timeout-s", type=float, help="snapshot timeout seconds")
+  p_watch.add_argument("--auto-refresh-s", type=float, help="initial auto refresh interval in seconds")
+  p_watch.add_argument("--target-driver", help="override dependency target driver")
+  p_watch.add_argument("--render-once", action="store_true", help="print one dashboard frame and exit")
+  p_watch.add_argument("--width", type=int, help="render width for --render-once")
+  p_watch.add_argument("--height", type=int, help="render height for --render-once")
+  p_watch.add_argument("--dry-run", action="store_true", help="print command without running it")
+  p_watch.set_defaults(func=cmd_watch)
 
   return parser
 

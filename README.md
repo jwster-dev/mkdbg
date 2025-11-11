@@ -120,6 +120,13 @@ This is the fastest way to understand the repo at a glance.
 
 The terminal dashboard is the fastest operator surface for stuck-stage triage, fault slices, and dependency what-if.
 
+Preferred `mkdbg` entrypoint:
+
+```bash
+mkdbg watch --target microkernel
+mkdbg watch --target microkernel --bundle-json tests/fixtures/triage/sample_bundle.json --render-once
+```
+
 Try it locally:
 
 ```bash
@@ -158,6 +165,7 @@ mkdbg attach
 mkdbg attach --break main --command continue --command bt --batch
 mkdbg snapshot --port /dev/cu.usbmodemXXXX
 mkdbg hil --port /dev/cu.usbmodemXXXX
+mkdbg watch --target microkernel
 mkdbg repo add tahoe --path ../TahoeOS --build-cmd "make -j4"
 mkdbg target use microkernel
 mkdbg build --target microkernel

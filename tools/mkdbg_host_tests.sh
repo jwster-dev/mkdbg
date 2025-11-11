@@ -10,6 +10,7 @@ TARGET_LIST_OUT="${TMP_DIR}/target_list.out"
 ATTACH_OUT="${TMP_DIR}/attach.out"
 ATTACH_ERR="${TMP_DIR}/attach.err"
 RUN_OUT="${TMP_DIR}/run.out"
+WATCH_OUT="${TMP_DIR}/watch.out"
 BIN_DIR="${TMP_DIR}/bin"
 
 cleanup() {
@@ -169,6 +170,31 @@ checks = [
 for item in checks:
     if item not in text:
         raise SystemExit(f"missing expected run output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" target add rootfixture \
+  --path "${ROOT_DIR}" \
+  --preset microkernel-mpu >/dev/null
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" watch --target rootfixture \
+  --bundle-json tests/fixtures/triage/sample_bundle.json \
+  --render-once \
+  --width 100 \
+  --height 32 > "${WATCH_OUT}"
+python3 - "${WATCH_OUT}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+checks = [
+    "[mkdbg] cwd=",
+    "[mkdbg] cmd=",
+    "bringup_ui.py",
+    "MicroKernel-MPU Bringup Console",
+    "failure=early_resource_fault",
+]
+for item in checks:
+    if item not in text:
+        raise SystemExit(f"missing expected watch output: {item}")
 PY
 
 INSTALL_DIR="${TMP_DIR}/install"
