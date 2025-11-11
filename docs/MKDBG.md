@@ -44,6 +44,8 @@ mkdbg attach
 mkdbg attach --break main --command continue --command bt --batch
 mkdbg snapshot --port /dev/cu.usbmodem21303
 mkdbg hil --port /dev/cu.usbmodem21303
+mkdbg watch --target microkernel
+mkdbg watch --target microkernel --bundle-json tests/fixtures/triage/sample_bundle.json --render-once
 ```
 
 Scripted attach flows can chain GDB actions without dropping into an
@@ -141,6 +143,7 @@ Current MVP supports:
 - `mkdbg snapshot`
 - `mkdbg attach`
 - `mkdbg run`
+- `mkdbg watch`
 
 It intentionally does not try to replace:
 
