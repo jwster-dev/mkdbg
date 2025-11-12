@@ -11,6 +11,10 @@ ATTACH_OUT="${TMP_DIR}/attach.out"
 ATTACH_ERR="${TMP_DIR}/attach.err"
 RUN_OUT="${TMP_DIR}/run.out"
 WATCH_OUT="${TMP_DIR}/watch.out"
+PROBE_HALT_OUT="${TMP_DIR}/probe_halt.out"
+PROBE_FLASH_OUT="${TMP_DIR}/probe_flash.out"
+PROBE_READ32_OUT="${TMP_DIR}/probe_read32.out"
+PROBE_WRITE32_OUT="${TMP_DIR}/probe_write32.out"
 BIN_DIR="${TMP_DIR}/bin"
 
 cleanup() {
@@ -195,6 +199,69 @@ checks = [
 for item in checks:
     if item not in text:
         raise SystemExit(f"missing expected watch output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" probe halt --target microkernel --dry-run > "${PROBE_HALT_OUT}"
+python3 - "${PROBE_HALT_OUT}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+checks = [
+    "[mkdbg] cwd=",
+    "[mkdbg] cmd=openocd -f ",
+    "reset halt; shutdown",
+]
+for item in checks:
+    if item not in text:
+        raise SystemExit(f"missing expected probe halt output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" probe flash --target microkernel --dry-run > "${PROBE_FLASH_OUT}"
+python3 - "${PROBE_FLASH_OUT}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+checks = [
+    "[mkdbg] cmd=openocd -f ",
+    "program /",
+    "MicroKernel_MPU.elf",
+    "verify reset exit",
+]
+for item in checks:
+    if item not in text:
+        raise SystemExit(f"missing expected probe flash output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" probe read32 --target microkernel --dry-run 0xE000ED28 > "${PROBE_READ32_OUT}"
+python3 - "${PROBE_READ32_OUT}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+checks = [
+    "mdw 0xe000ed28",
+    "shutdown",
+]
+for item in checks:
+    if item not in text:
+        raise SystemExit(f"missing expected probe read32 output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" probe write32 --target microkernel --dry-run 0xE000ED24 0x700 > "${PROBE_WRITE32_OUT}"
+python3 - "${PROBE_WRITE32_OUT}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+checks = [
+    "mww 0xe000ed24 0x00000700",
+    "shutdown",
+]
+for item in checks:
+    if item not in text:
+        raise SystemExit(f"missing expected probe write32 output: {item}")
 PY
 
 INSTALL_DIR="${TMP_DIR}/install"

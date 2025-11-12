@@ -40,6 +40,8 @@ Then use the common flows:
 mkdbg doctor
 mkdbg build
 mkdbg flash
+mkdbg probe halt
+mkdbg probe flash
 mkdbg attach
 mkdbg attach --break main --command continue --command bt --batch
 mkdbg snapshot --port /dev/cu.usbmodem21303
@@ -139,6 +141,12 @@ Current MVP supports:
 - `mkdbg target use`
 - `mkdbg build`
 - `mkdbg flash`
+- `mkdbg probe reset`
+- `mkdbg probe halt`
+- `mkdbg probe resume`
+- `mkdbg probe flash`
+- `mkdbg probe read32`
+- `mkdbg probe write32`
 - `mkdbg hil`
 - `mkdbg snapshot`
 - `mkdbg attach`

@@ -161,6 +161,8 @@ mkdbg init --name microkernel --port /dev/cu.usbmodemXXXX
 mkdbg doctor
 mkdbg build
 mkdbg flash
+mkdbg probe halt
+mkdbg probe flash
 mkdbg attach
 mkdbg attach --break main --command continue --command bt --batch
 mkdbg snapshot --port /dev/cu.usbmodemXXXX

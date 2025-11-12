@@ -533,6 +533,60 @@ def cmd_watch(args: argparse.Namespace) -> int:
   return run_shell(shell_join(command_parts), repo_root, args.dry_run)
 
 
+def probe_required_paths(repo_name: str,
+                         repo: dict[str, str],
+                         repo_root: Path,
+                         port: str | None) -> tuple[dict[str, str], str]:
+  ctx = build_context(repo_name, repo, repo_root, port)
+  openocd_cfg = ctx["openocd_cfg"]
+  if not openocd_cfg:
+    die(f"repo `{repo_name}` has no `openocd_cfg` configured")
+  return ctx, openocd_cfg
+
+
+def run_probe_action(args: argparse.Namespace, command: str) -> int:
+  config_path = require_config(Path.cwd())
+  data = load_config(config_path)
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
+  _, openocd_cfg = probe_required_paths(repo_name, repo, repo_root, args.port or repo.get("port"))
+  openocd_cmd = shell_join(["openocd", "-f", openocd_cfg, "-c", command])
+  return run_shell(openocd_cmd, repo_root, args.dry_run)
+
+
+def cmd_probe_flash(args: argparse.Namespace) -> int:
+  config_path = require_config(Path.cwd())
+  data = load_config(config_path)
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
+  ctx, openocd_cfg = probe_required_paths(repo_name, repo, repo_root, args.port or repo.get("port"))
+  elf_path = ctx["elf_path"]
+  if not elf_path:
+    die(f"repo `{repo_name}` has no `elf_path` configured")
+  command = f"program {shlex.quote(elf_path)} verify reset exit"
+  openocd_cmd = shell_join(["openocd", "-f", openocd_cfg, "-c", command])
+  return run_shell(openocd_cmd, repo_root, args.dry_run)
+
+
+def parse_u32(value: str, label: str) -> str:
+  try:
+    parsed = int(value, 0)
+  except ValueError:
+    die(f"invalid {label}: {value}")
+  if parsed < 0 or parsed > 0xFFFFFFFF:
+    die(f"{label} out of range: {value}")
+  return f"0x{parsed:08x}"
+
+
+def cmd_probe_read32(args: argparse.Namespace) -> int:
+  address = parse_u32(args.address, "address")
+  return run_probe_action(args, f"init; mdw {address}; shutdown")
+
+
+def cmd_probe_write32(args: argparse.Namespace) -> int:
+  address = parse_u32(args.address, "address")
+  value = parse_u32(args.value, "value")
+  return run_probe_action(args, f"init; mww {address} {value}; shutdown")
+
+
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(
       description="mkdbg: repo-aware embedded debug and HIL orchestration CLI",
@@ -683,6 +737,42 @@ def build_parser() -> argparse.ArgumentParser:
   p_watch.add_argument("--height", type=int, help="render height for --render-once")
   p_watch.add_argument("--dry-run", action="store_true", help="print command without running it")
   p_watch.set_defaults(func=cmd_watch)
+
+  p_probe = sub.add_parser("probe", help="run one-shot OpenOCD probe actions")
+  probe_sub = p_probe.add_subparsers(dest="probe_cmd", required=True)
+
+  def add_probe_target_args(cmd: argparse.ArgumentParser) -> None:
+    cmd.add_argument("repo", nargs="?", help="repo name (default: config default_repo)")
+    cmd.add_argument("--target", help="target alias (same as repo name)")
+    cmd.add_argument("--port", help="optional serial override for repo templates")
+    cmd.add_argument("--dry-run", action="store_true", help="print command without running it")
+
+  p_probe_reset = probe_sub.add_parser("reset", help="reset the target and let it run")
+  add_probe_target_args(p_probe_reset)
+  p_probe_reset.set_defaults(func=lambda args: run_probe_action(args, "init; reset run; shutdown"))
+
+  p_probe_halt = probe_sub.add_parser("halt", help="reset the target and halt it")
+  add_probe_target_args(p_probe_halt)
+  p_probe_halt.set_defaults(func=lambda args: run_probe_action(args, "init; reset halt; shutdown"))
+
+  p_probe_resume = probe_sub.add_parser("resume", help="resume target execution")
+  add_probe_target_args(p_probe_resume)
+  p_probe_resume.set_defaults(func=lambda args: run_probe_action(args, "init; resume; shutdown"))
+
+  p_probe_flash = probe_sub.add_parser("flash", help="program the configured ELF over OpenOCD")
+  add_probe_target_args(p_probe_flash)
+  p_probe_flash.set_defaults(func=cmd_probe_flash)
+
+  p_probe_read32 = probe_sub.add_parser("read32", help="read one 32-bit value with OpenOCD")
+  add_probe_target_args(p_probe_read32)
+  p_probe_read32.add_argument("address", help="address to read, decimal or 0x-prefixed")
+  p_probe_read32.set_defaults(func=cmd_probe_read32)
+
+  p_probe_write32 = probe_sub.add_parser("write32", help="write one 32-bit value with OpenOCD")
+  add_probe_target_args(p_probe_write32)
+  p_probe_write32.add_argument("address", help="address to write, decimal or 0x-prefixed")
+  p_probe_write32.add_argument("value", help="value to write, decimal or 0x-prefixed")
+  p_probe_write32.set_defaults(func=cmd_probe_write32)
 
   return parser
 
