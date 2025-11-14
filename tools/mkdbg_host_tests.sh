@@ -11,6 +11,9 @@ ATTACH_OUT="${TMP_DIR}/attach.out"
 ATTACH_ERR="${TMP_DIR}/attach.err"
 RUN_OUT="${TMP_DIR}/run.out"
 WATCH_OUT="${TMP_DIR}/watch.out"
+CAPTURE_DRY_OUT="${TMP_DIR}/capture_dry.out"
+CAPTURE_JSON_OUT="${TMP_DIR}/capture.json"
+CAPTURE_STDOUT="${TMP_DIR}/capture.stdout"
 PROBE_HALT_OUT="${TMP_DIR}/probe_halt.out"
 PROBE_FLASH_OUT="${TMP_DIR}/probe_flash.out"
 PROBE_READ32_OUT="${TMP_DIR}/probe_read32.out"
@@ -199,6 +202,51 @@ checks = [
 for item in checks:
     if item not in text:
         raise SystemExit(f"missing expected watch output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" capture bundle --target microkernel \
+  --dry-run > "${CAPTURE_DRY_OUT}"
+python3 - "${CAPTURE_DRY_OUT}" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+checks = [
+    "[mkdbg] cwd=",
+    "[mkdbg] cmd=",
+    "triage_bundle.py",
+    "--port /dev/ttyACM0",
+]
+for item in checks:
+    if item not in text:
+        raise SystemExit(f"missing expected capture dry-run output: {item}")
+PY
+
+PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" capture bundle --target rootfixture \
+  --source-log tests/fixtures/triage/sample_snapshot.log \
+  --output "${CAPTURE_JSON_OUT}" \
+  --json > "${CAPTURE_STDOUT}"
+python3 - "${CAPTURE_JSON_OUT}" "${CAPTURE_STDOUT}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+bundle = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+stdout_lines = [line for line in Path(sys.argv[2]).read_text(encoding="utf-8").splitlines() if line.strip()]
+json_lines = [line for line in stdout_lines if line.lstrip().startswith("{")]
+if not json_lines:
+    raise SystemExit("expected capture json summary line")
+summary = json.loads(json_lines[-1])
+if bundle.get("ok") is not True:
+    raise SystemExit("expected capture bundle ok=true")
+if summary.get("ok") is not True:
+    raise SystemExit("expected capture summary ok=true")
+if summary.get("bundle_path") != sys.argv[1]:
+    raise SystemExit("bundle path mismatch")
+if summary.get("fault_slices", 0) < 1:
+    raise SystemExit("expected capture fault_slices >= 1")
+if bundle.get("dependency", {}).get("target_driver") != "sensor":
+    raise SystemExit("expected capture target driver sensor")
 PY
 
 PATH="${BIN_DIR}:${PATH}" python3 "${ROOT_DIR}/tools/mkdbg" probe halt --target microkernel --dry-run > "${PROBE_HALT_OUT}"

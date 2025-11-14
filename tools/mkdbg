@@ -533,6 +533,39 @@ def cmd_watch(args: argparse.Namespace) -> int:
   return run_shell(shell_join(command_parts), repo_root, args.dry_run)
 
 
+def cmd_capture_bundle(args: argparse.Namespace) -> int:
+  config_path = require_config(Path.cwd())
+  data = load_config(config_path)
+  repo_name, repo, repo_root = resolve_repo(config_path, data, resolve_repo_arg(args))
+  script_path = repo_root / "tools" / "triage_bundle.py"
+
+  if not args.dry_run and not script_path.exists():
+    die(f"repo `{repo_name}` has no triage bundle script: {script_path}")
+  if args.source_log is not None and args.port is not None:
+    die("capture bundle accepts at most one of --source-log or --port")
+
+  command_parts = [sys.executable, str(script_path)]
+  if args.source_log is not None:
+    command_parts.extend(["--source-log", format_path(repo_root, args.source_log)])
+  else:
+    command_parts.extend(["--port", pick_port(repo, args.port)])
+
+  if args.baud is not None:
+    command_parts.extend(["--baud", str(args.baud)])
+  if args.char_delay_ms is not None:
+    command_parts.extend(["--char-delay-ms", str(args.char_delay_ms)])
+  if args.snapshot_timeout_s is not None:
+    command_parts.extend(["--snapshot-timeout-s", str(args.snapshot_timeout_s)])
+  if args.target_driver is not None:
+    command_parts.extend(["--target-driver", args.target_driver])
+  if args.output is not None:
+    command_parts.extend(["--output", format_path(repo_root, args.output)])
+  if args.json:
+    command_parts.append("--json")
+
+  return run_shell(shell_join(command_parts), repo_root, args.dry_run)
+
+
 def probe_required_paths(repo_name: str,
                          repo: dict[str, str],
                          repo_root: Path,
@@ -737,6 +770,23 @@ def build_parser() -> argparse.ArgumentParser:
   p_watch.add_argument("--height", type=int, help="render height for --render-once")
   p_watch.add_argument("--dry-run", action="store_true", help="print command without running it")
   p_watch.set_defaults(func=cmd_watch)
+
+  p_capture = sub.add_parser("capture", help="capture triage artifacts for later replay and analysis")
+  capture_sub = p_capture.add_subparsers(dest="capture_cmd", required=True)
+
+  p_capture_bundle = capture_sub.add_parser("bundle", help="build one triage bundle from a live port or log")
+  p_capture_bundle.add_argument("repo", nargs="?", help="repo name (default: config default_repo)")
+  p_capture_bundle.add_argument("--target", help="target alias (same as repo name)")
+  p_capture_bundle.add_argument("--port", help="override serial port for live capture")
+  p_capture_bundle.add_argument("--source-log", help="existing snapshot/bringup log path")
+  p_capture_bundle.add_argument("--baud", type=int, help="UART baud rate")
+  p_capture_bundle.add_argument("--char-delay-ms", type=float, help="per-char TX delay in ms")
+  p_capture_bundle.add_argument("--snapshot-timeout-s", type=float, help="snapshot timeout seconds")
+  p_capture_bundle.add_argument("--target-driver", help="override dependency target driver")
+  p_capture_bundle.add_argument("--output", help="output bundle json path")
+  p_capture_bundle.add_argument("--json", action="store_true", help="print machine-readable summary")
+  p_capture_bundle.add_argument("--dry-run", action="store_true", help="print command without running it")
+  p_capture_bundle.set_defaults(func=cmd_capture_bundle)
 
   p_probe = sub.add_parser("probe", help="run one-shot OpenOCD probe actions")
   probe_sub = p_probe.add_subparsers(dest="probe_cmd", required=True)
