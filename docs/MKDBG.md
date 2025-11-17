@@ -10,6 +10,7 @@ common embedded flows feel like a single operator-facing CLI:
 - initialize one local config
 - register one or more repos or target aliases
 - build / flash / attach / snapshot / run HIL
+- capture one triage bundle for later replay and sharing
 - keep repo-specific commands in configuration instead of shell history
 
 ## Install
@@ -44,6 +45,8 @@ mkdbg probe halt
 mkdbg probe flash
 mkdbg attach
 mkdbg attach --break main --command continue --command bt --batch
+mkdbg capture bundle --port /dev/cu.usbmodem21303
+mkdbg capture bundle --source-log tests/fixtures/triage/sample_snapshot.log --output build/mkdbg.bundle.json
 mkdbg snapshot --port /dev/cu.usbmodem21303
 mkdbg hil --port /dev/cu.usbmodem21303
 mkdbg watch --target microkernel
@@ -147,6 +150,7 @@ Current MVP supports:
 - `mkdbg probe flash`
 - `mkdbg probe read32`
 - `mkdbg probe write32`
+- `mkdbg capture bundle`
 - `mkdbg hil`
 - `mkdbg snapshot`
 - `mkdbg attach`

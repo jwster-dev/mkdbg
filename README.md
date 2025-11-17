@@ -82,6 +82,7 @@ mkdbg doctor
 mkdbg build
 mkdbg flash
 mkdbg probe halt
+mkdbg capture bundle --port /dev/cu.usbmodemXXXX
 mkdbg attach --break main --command continue --command bt --batch
 mkdbg snapshot --port /dev/cu.usbmodemXXXX
 mkdbg watch --target microkernel
