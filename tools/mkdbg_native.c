@@ -165,6 +165,14 @@ typedef struct {
 } ActionOptions;
 
 typedef struct {
+  const char *repo;
+  const char *target;
+  const char *branch_name;
+  const char *path;
+  int dry_run;
+} GitOptions;
+
+typedef struct {
   char id[MAX_NAME];
   char name[MAX_NAME];
   char status[MAX_NAME];
@@ -1064,7 +1072,7 @@ static int command_available(const char *command)
 static void usage(void)
 {
   printf("mkdbg-native %s\n", MKDBG_NATIVE_VERSION);
-  printf("usage: mkdbg-native [--version] <init|doctor|repo|target|incident|build|flash|hil|snapshot|watch|attach|probe|run|capture> [options]\n");
+  printf("usage: mkdbg-native [--version] <init|doctor|repo|target|incident|build|flash|hil|snapshot|watch|attach|probe|git|run|capture> [options]\n");
 }
 
 static void init_default_repo_name(char *out, size_t out_size)
@@ -1901,6 +1909,94 @@ static int cmd_run(const RunOptions *opts)
   return run_process(argv, repo_root, opts->dry_run);
 }
 
+static void git_resolve_repo_root(const GitOptions *opts,
+                                  char *config_path,
+                                  size_t config_path_size,
+                                  char *repo_root,
+                                  size_t repo_root_size)
+{
+  MkdbgConfig config;
+  const char *repo_name;
+  const RepoConfig *repo;
+
+  if (find_config_upward(config_path, config_path_size) != 0) {
+    die("missing %s; run `mkdbg init` first", CONFIG_NAME);
+  }
+  if (load_config_file(config_path, &config) != 0) {
+    die("invalid config: %s", config_path);
+  }
+  resolve_repo_name(&config, opts->repo, opts->target, &repo_name);
+  repo = find_repo_const(&config, repo_name);
+  if (repo == NULL) {
+    die("repo `%s` not found in %s", repo_name, config_path);
+  }
+  resolve_repo_root(config_path, repo, repo_root, repo_root_size);
+}
+
+static int cmd_git_status(const GitOptions *opts)
+{
+  char config_path[PATH_MAX];
+  char repo_root[PATH_MAX];
+  char *argv[] = {(char *)"git", (char *)"status", NULL};
+
+  git_resolve_repo_root(opts, config_path, sizeof(config_path),
+                        repo_root, sizeof(repo_root));
+  return run_process(argv, repo_root, opts->dry_run);
+}
+
+static int cmd_git_rev(const GitOptions *opts)
+{
+  char config_path[PATH_MAX];
+  char repo_root[PATH_MAX];
+  char *argv[] = {(char *)"git", (char *)"rev-parse", (char *)"HEAD", NULL};
+
+  git_resolve_repo_root(opts, config_path, sizeof(config_path),
+                        repo_root, sizeof(repo_root));
+  return run_process(argv, repo_root, opts->dry_run);
+}
+
+static int cmd_git_new_branch(const GitOptions *opts)
+{
+  char config_path[PATH_MAX];
+  char repo_root[PATH_MAX];
+  char *argv[] = {(char *)"git", (char *)"checkout", (char *)"-b",
+                  (char *)opts->branch_name, NULL};
+
+  if (opts->branch_name == NULL || opts->branch_name[0] == '\0') {
+    die("git new-branch requires a branch name");
+  }
+  git_resolve_repo_root(opts, config_path, sizeof(config_path),
+                        repo_root, sizeof(repo_root));
+  return run_process(argv, repo_root, opts->dry_run);
+}
+
+static int cmd_git_worktree(const GitOptions *opts)
+{
+  char config_path[PATH_MAX];
+  char repo_root[PATH_MAX];
+  char *argv[] = {(char *)"git", (char *)"worktree", (char *)"add",
+                  (char *)opts->path, NULL};
+
+  if (opts->path == NULL || opts->path[0] == '\0') {
+    die("git worktree requires a path");
+  }
+  git_resolve_repo_root(opts, config_path, sizeof(config_path),
+                        repo_root, sizeof(repo_root));
+  return run_process(argv, repo_root, opts->dry_run);
+}
+
+static int cmd_git_push_current(const GitOptions *opts)
+{
+  char config_path[PATH_MAX];
+  char repo_root[PATH_MAX];
+  char *argv[] = {(char *)"git", (char *)"push", (char *)"-u",
+                  (char *)"origin", (char *)"HEAD", NULL};
+
+  git_resolve_repo_root(opts, config_path, sizeof(config_path),
+                        repo_root, sizeof(repo_root));
+  return run_process(argv, repo_root, opts->dry_run);
+}
+
 static void build_action_context(const char *config_path,
                                  const char *repo_name,
                                  const RepoConfig *repo,
@@ -2421,6 +2517,29 @@ static int parse_action_args(int argc, char **argv, ActionOptions *opts)
   return 0;
 }
 
+static int parse_git_args(int argc, char **argv, GitOptions *opts)
+{
+  int i;
+  memset(opts, 0, sizeof(*opts));
+  for (i = 0; i < argc; ++i) {
+    if (strcmp(argv[i], "--target") == 0) {
+      if (i + 1 >= argc) {
+        die("missing value for --target");
+      }
+      opts->target = argv[++i];
+    } else if (strcmp(argv[i], "--dry-run") == 0) {
+      opts->dry_run = 1;
+    } else if (argv[i][0] == '-') {
+      die("unknown git argument: %s", argv[i]);
+    } else if (opts->repo == NULL) {
+      opts->repo = argv[i];
+    } else {
+      die("git accepts at most one repo name");
+    }
+  }
+  return 0;
+}
+
 int main(int argc, char **argv)
 {
   if (argc == 2 && strcmp(argv[1], "--version") == 0) {
@@ -2575,6 +2694,42 @@ int main(int argc, char **argv)
       return cmd_probe_write32(&opts);
     }
     die("unknown probe subcommand: %s", argv[2]);
+  }
+
+  if (strcmp(argv[1], "git") == 0) {
+    GitOptions opts;
+    if (argc < 3) {
+      die("git requires a subcommand: status, rev, new-branch, worktree, push-current");
+    }
+    if (strcmp(argv[2], "status") == 0) {
+      parse_git_args(argc - 3, argv + 3, &opts);
+      return cmd_git_status(&opts);
+    }
+    if (strcmp(argv[2], "rev") == 0) {
+      parse_git_args(argc - 3, argv + 3, &opts);
+      return cmd_git_rev(&opts);
+    }
+    if (strcmp(argv[2], "new-branch") == 0) {
+      if (argc < 4) {
+        die("git new-branch requires a branch name");
+      }
+      parse_git_args(argc - 4, argv + 3, &opts);
+      opts.branch_name = argv[argc - 1];
+      return cmd_git_new_branch(&opts);
+    }
+    if (strcmp(argv[2], "worktree") == 0) {
+      if (argc < 4) {
+        die("git worktree requires a path");
+      }
+      parse_git_args(argc - 4, argv + 3, &opts);
+      opts.path = argv[argc - 1];
+      return cmd_git_worktree(&opts);
+    }
+    if (strcmp(argv[2], "push-current") == 0) {
+      parse_git_args(argc - 3, argv + 3, &opts);
+      return cmd_git_push_current(&opts);
+    }
+    die("unknown git subcommand: %s", argv[2]);
   }
 
   if (strcmp(argv[1], "run") == 0) {
