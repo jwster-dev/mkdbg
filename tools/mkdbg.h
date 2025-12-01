@@ -225,4 +225,34 @@ int command_program(const char *command, char *out, size_t out_size);
 int search_path(const char *program);
 int command_available(const char *command);
 
+/* ---- process.c ---- */
+void print_shell_arg(FILE *f, const char *arg);
+int run_process(char *const argv[], const char *cwd, int dry_run);
+void print_command_label(const char *label, char *const argv[]);
+void sleep_seconds(double seconds);
+int wait_status_to_rc(int status);
+pid_t spawn_process(char *const argv[], const char *cwd);
+int wait_for_pid(pid_t pid);
+int try_reap_pid(pid_t pid, int *rc);
+void terminate_pid(pid_t pid);
+
+/* ---- config.c ---- */
+const RepoConfig *find_repo_const(const MkdbgConfig *config, const char *name);
+RepoConfig *find_repo_mut(MkdbgConfig *config, const char *name);
+void repo_set_defaults(RepoConfig *repo, const char *preset, const char *repo_path);
+void write_config_value(FILE *f, const char *key, const char *value);
+void render_repo(FILE *f, const RepoConfig *repo);
+int save_config_file(const char *config_path, const MkdbgConfig *config);
+int parse_quoted_value(const char *value, char *out, size_t out_size);
+void repo_assign_key(RepoConfig *repo, const char *key, const char *value);
+int load_config_file(const char *config_path, MkdbgConfig *config);
+int find_config_upward(char *out, size_t out_size);
+void resolve_repo_root(const char *config_path, const RepoConfig *repo, char *out, size_t out_size);
+void resolve_repo_file(const char *config_path, const RepoConfig *repo, const char *raw, char *out, size_t out_size);
+void state_root_from_config(const char *config_path, char *out, size_t out_size);
+void incidents_root_from_config(const char *config_path, char *out, size_t out_size);
+void current_incident_path_from_config(const char *config_path, char *out, size_t out_size);
+void incident_meta_path(const char *incident_dir, char *out, size_t out_size);
+int resolve_repo_name(const MkdbgConfig *config, const char *repo, const char *target, const char **out_name);
+
 #endif /* MKDBG_H */
