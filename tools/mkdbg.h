@@ -299,4 +299,32 @@ int cmd_probe_flash(const ProbeOptions *opts);
 int cmd_probe_read32(const ProbeOptions *opts);
 int cmd_probe_write32(const ProbeOptions *opts);
 
+/* ---- action.c ---- */
+void build_action_context(const char *config_path,
+                          const char *repo_name,
+                          const RepoConfig *repo,
+                          const char *port,
+                          char *repo_root,
+                          size_t repo_root_size,
+                          char *elf_path,
+                          size_t elf_path_size,
+                          char *openocd_cfg,
+                          size_t openocd_cfg_size,
+                          char *snapshot_output,
+                          size_t snapshot_output_size,
+                          char *gdb_target,
+                          size_t gdb_target_size);
+void format_action_command(const char *template,
+                           const char *repo_name,
+                           const char *repo_root,
+                           const char *port,
+                           const char *elf_path,
+                           const char *openocd_cfg,
+                           const char *snapshot_output,
+                           const char *gdb_target,
+                           char *out,
+                           size_t out_size);
+int cmd_run(const RunOptions *opts);
+int cmd_configured_action(const ActionOptions *opts, const char *field, int needs_port);
+
 #endif /* MKDBG_H */
