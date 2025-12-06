@@ -335,4 +335,18 @@ const char *resolve_serial_port(const char *config_path,
 int cmd_serial_tail(const SerialOptions *opts);
 int cmd_serial_send(const SerialOptions *opts);
 
+/* ---- core.c ---- */
+void init_default_repo_name(char *out, size_t out_size);
+int cmd_init(const InitOptions *opts);
+int cmd_doctor(const DoctorOptions *opts);
+void apply_repo_add_overrides(RepoConfig *repo, const RepoAddOptions *opts);
+int cmd_repo_add(const RepoAddOptions *opts);
+int cmd_repo_list(void);
+int cmd_repo_use(const NameCommandOptions *opts);
+
+/* ---- launcher.c ---- */
+int cmd_capture_bundle(const CaptureBundleOptions *opts);
+int cmd_watch(const WatchOptions *opts);
+int cmd_attach(const AttachOptions *opts);
+
 #endif /* MKDBG_H */
