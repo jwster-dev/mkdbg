@@ -97,6 +97,7 @@ add_executable(${PROJECT_NAME}.elf
   bsp/board.c
   bsp/mpu_demo.c
   bsp/system_stm32f4xx.c
+  bsp/seam_port.c
   freertos/Source/list.c
   freertos/Source/queue.c
   freertos/Source/tasks.c
@@ -153,4 +154,5 @@ target_include_directories(${PROJECT_NAME}.elf PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/freertos
   ${CMAKE_CURRENT_LIST_DIR}/freertos/Source/include
   ${CMAKE_CURRENT_LIST_DIR}/freertos/Source/portable/GCC/ARM_CM4_MPU
+  ${CMAKE_CURRENT_LIST_DIR}/tools/seam/include
 )
