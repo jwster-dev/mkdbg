@@ -1,11 +1,16 @@
 /* bsp/seam_port.c — Board-specific port functions for seam_agent.h
  *
- * Implements the two functions seam_agent.h requires:
+ * Defines the shared ring buffer storage (SEAM_IMPLEMENT) and implements
+ * the two port functions seam_agent.h requires:
  *   seam_port_tick()            — DWT cycle counter (always-on, fault-safe)
  *   seam_port_write_block()     — Blocking UART TX, safe from fault handlers
  *
- * Call seam_port_init() once at startup (from board_init or main).
+ * Call seam_port_init() once at startup (from main, before RTOS starts).
+ *
+ * SEAM_IMPLEMENT must be defined in exactly one translation unit.
+ * All other files that call seam_emit() include seam_agent.h without it.
  */
+#define SEAM_IMPLEMENT
 #include "seam_agent.h"
 #include "stm32f4xx.h"
 
