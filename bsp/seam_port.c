@@ -13,6 +13,13 @@
 #define SEAM_IMPLEMENT
 #include "seam_agent.h"
 #include "stm32f4xx.h"
+#include "build_info.h"
+
+/* ── Board ID: low 16 bits of git SHA fragment from build_info.h ─────────── */
+uint16_t seam_port_board_id(void)
+{
+    return (uint16_t)(BUILD_INFO_ID & 0xFFFFu);
+}
 
 /* ── seam_port_init: enable DWT cycle counter ───────────────────────────── */
 void seam_port_init(void)
