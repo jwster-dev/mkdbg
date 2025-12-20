@@ -172,6 +172,7 @@ add_executable(${PROJECT_NAME}.elf
   bsp/mpu_demo.c
   bsp/system_stm32f4xx.c
   bsp/seam_port.c
+  bsp/wire_port.c
   freertos/Source/list.c
   freertos/Source/queue.c
   freertos/Source/tasks.c
