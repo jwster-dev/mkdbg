@@ -4,3 +4,6 @@
 [submodule "tools/wire"]
 	path = tools/wire
 	url = https://github.com/JialongWang1201/wire.git
+[submodule "tools/libgit2"]
+	path = tools/libgit2
+	url = https://github.com/libgit2/libgit2.git
