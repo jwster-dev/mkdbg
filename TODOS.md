@@ -6,7 +6,7 @@
 
 ## Phase 2 — libgit2 集成
 
-- [ ] **libgit2 原生集成** — 把 `mkdbg git status/rev/branch/worktree` 的本地操作切换到 libgit2（静态链接），移除对外部 `git` CLI 的依赖。网络操作（push/fetch）保留 git CLI fallback（避免 TLS/SSH 依赖）。
+- [x] **libgit2 原生集成** — 把 `mkdbg git status/rev/branch/worktree` 的本地操作切换到 libgit2（静态链接），移除对外部 `git` CLI 的依赖。网络操作（push/fetch）保留 git CLI fallback（避免 TLS/SSH 依赖）。**Completed: Phase 2 (2026-03-21)**
   - **Why:** 这是"零依赖"成功标准的核心——用户不需要安装 git 即可使用 mkdbg git 子命令。
   - **Pros:** 真正零依赖；libgit2 API 稳定、MIT 许可；本地操作速度更快。
   - **Cons:** macOS 静态链接需要 `find_library(IOKit/CoreFoundation/Security)`（非平凡 CMake 配置）；需要测试 fallback 路径。
