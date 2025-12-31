@@ -102,7 +102,11 @@ bash tools/install_mkdbg.sh
 ```
 
 This installs the native C frontend as `mkdbg`. Preview build:
-`bash tools/build_mkdbg_native.sh && build/mkdbg-native --version`
+
+```bash
+cmake -S . -B build_host && cmake --build build_host --target mkdbg_native_host
+./build_host/mkdbg-native --version
+```
 
 Or install it remotely:
 
@@ -142,19 +146,38 @@ tools/vm32 triage-replay build --bundle-json tests/fixtures/triage/sample_bundle
 bash tools/hil_gate.sh --port /dev/cu.usbmodemXXXX
 ```
 
-## Live GDB Debugging (wire)
+## Crash Diagnostics (wire)
 
-When the firmware crashes, `wire` halts the CPU and waits for a GDB connection
-over the same UART used by `mkdbg`. No JTAG probe or OpenOCD required.
+When the firmware crashes, `wire` halts the CPU and exposes the fault state over
+the same UART used by `mkdbg`. No JTAG probe or OpenOCD required.
 
-Build the host proxy:
+Build the host tools (wire-host is built alongside mkdbg-native):
 
 ```bash
-bash tools/wire/build_wire_host.sh
-# → tools/wire/build/wire-host
+cmake -S . -B build_host && cmake --build build_host
+# → build_host/wire-host, build_host/mkdbg-native
 ```
 
-On crash, open two terminals:
+### Zero-dependency crash readout (--dump)
+
+Read crash state without GDB — outputs JSON with registers, CFSR, and heuristic
+backtrace in under a second:
+
+```bash
+# Direct: read crash report, print human-readable summary
+mkdbg attach --port /dev/cu.usbmodemXXXX --baud 115200
+
+# Or call wire-host directly for raw JSON
+wire-host --port /dev/cu.usbmodemXXXX --baud 115200 --dump
+```
+
+The dashboard (`mkdbg dashboard`) polls this automatically and shows crash state
+in the PROBE panel in real time.
+
+### Live GDB session
+
+For full interactive debugging, `wire-host` bridges UART to TCP so GDB can
+connect without OpenOCD:
 
 ```bash
 # Terminal 1 — bridge UART to TCP port 3333

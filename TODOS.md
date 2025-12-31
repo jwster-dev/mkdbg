@@ -1,8 +1,27 @@
 # TODOS
 
+## Phase 3 — wire-host --dump + mkdbg crash attach
+
+- [x] **Phase 3a — wire-host --dump 模式** — wire repo 新增 `wire_rsp_client.c`（RSP client 收发 + NAK/retransmit）、`wire_crash.c`（CFSR decode + heuristic backtrace + JSON 输出）、`wire_host.c` 新增 `--dump` flag。MicroKernel-MPU 新增 `tools/mkdbg_wire.c`（`WireCrashReport` struct + `wire_probe_dump()`），`mkdbg_launcher.c` `cmd_attach()` 增加 wire path（`--port/--baud` 触发），`mkdbg_dashboard.c` PROBE 面板集成非阻塞子进程轮询。同时删除 `tools/build_mkdbg_native.sh`（Phase 2 清理）。**Completed: Phase 3a (2026-03-21)**
+  - **Why:** 实现"零依赖 crash 诊断"——crash 发生后不需要 GDB/OpenOCD，wire-host --dump 直接输出 JSON，mkdbg attach 输出人类可读报告，Dashboard PROBE 面板实时显示。
+  - **Pros:** wire-host 可独立使用；mkdbg attach 不再依赖 GDB；Dashboard PROBE 面板有真实数据。
+  - **Cons:** 需要协调两个 repo（wire + MicroKernel-MPU）；wire 子模块指针需更新；QEMU CI 测试需要会 fault 的测试固件。
+  - **Context:** 设计文档已 APPROVED（~/.gstack/projects/.../wangjialong-feature-phase2-libgit2-design-20260321-201725.md）。Eng review 已完成（2026-03-21）。核心决策：AttachOptions 新增 --baud；JSON 解析放在 mkdbg_wire.c（DRY）；Dashboard 用 O_NONBLOCK pipe+fork 轮询；RSP client 实现 NAK/retransmit（max 3 retry）。
+  - **Effort:** M human (~1 周) → S with CC (~45 分钟)
+  - **Priority:** P1 — 阻塞 Dashboard PROBE 真实数据 + mkdbg "零依赖调试" 成功标准
+  - **Depends on:** Phase 2 libgit2（✓）、Phase 4 stub（✓）
+- [ ] **Phase 3b — wire 嵌入 mkdbg（迁移）** — 把 `wire_rsp_client.c` + `wire_crash.c` 直接编译进 `mkdbg_native_host`（像 seam_lib 一样作为 OBJECT library），去掉 wire-host 子进程依赖。wire-host 变为可选的 GDB bridge 工具。
+  - **Why:** 最终目标：mkdbg attach 不需要 wire-host 二进制在 PATH 中；真正自包含。
+  - **Pros:** 消除 subprocess 开销；更健壮（不依赖外部 binary）；符合"单一二进制"设计目标。
+  - **Cons:** 需要 wire_rsp_client.c/wire_crash.c 先在 Phase 3a 中稳定；host/firmware 分离变模糊（wire 代码进 mkdbg）。
+  - **Context:** Phase 3a 的代码直接迁移过来——不会白费。迁移路径：把 wire/host/ 中的 .c 文件改为 OBJECT library，CMakeLists.txt 类似 seam_lib 写法。
+  - **Effort:** S human (~3 天) → XS with CC (~20 分钟)
+  - **Priority:** P2 — 依赖 Phase 3a 稳定
+  - **Depends on:** Phase 3a（未完成）
+
 ## Phase 2 后清理
 
-- [ ] **移除 `tools/build_mkdbg_native.sh`** — Phase 2 (libgit2 集成) 稳定后删除旧 shell 构建脚本，完全迁移到 CMake。保留两套构建系统增加维护负担。依赖：Phase 1a CMake 切换 + Phase 2 libgit2 集成完成。
+- [x] **移除 `tools/build_mkdbg_native.sh`** — **Bundle into Phase 3a PR.** Phase 2 (libgit2 集成) 已稳定，删除旧 shell 构建脚本，完全迁移到 CMake。**Completed: Phase 3a (2026-03-21)**
 
 ## Phase 2 — libgit2 集成
 
@@ -28,6 +47,8 @@
 
 ## Completed
 
+- [x] **Phase 3a — wire-host --dump 模式** — wire_rsp_client.c (RSP client + NAK/retransmit), wire_crash.c (CFSR decode + heuristic backtrace + JSON output), wire-host --dump flag, mkdbg_wire.c (WireCrashReport + wire_probe_dump/start/poll), mkdbg attach --port/--baud wire path, Dashboard PROBE panel (non-blocking subprocess polling). tools/build_mkdbg_native.sh removed. **Completed: Phase 3a (2026-03-21)**
+- [x] **移除 tools/build_mkdbg_native.sh** — Deleted in Phase 3a PR. **Completed: Phase 3a (2026-03-21)**
 - [x] **Phase 4 stub — Dashboard TUI** — `mkdbg dashboard` 子命令，termbox2 TUI，串口环形缓冲区，libgit2 git 状态面板，探针 stub，构建 stub，单线程 poll 主循环。**Completed: Phase 4 stub (2026-03-21)**
 - [x] **Phase 1a — seam 集成** — seam causal fault analysis 作为 git submodule 集成到 MicroKernel-MPU，`mkdbg seam analyze` 子命令，firmware instrumentation，triage bridge。**Completed:** Phase 1a (2026-03-20)
 - [x] **Phase 1b — wire 集成** — wire GDB RSP stub 作为 git submodule 集成，bsp/wire_port.c，wire_init() 调用，wire-host 构建/安装集成，QEMU CI 测试。**Completed:** Phase 1b (2026-03-21)
