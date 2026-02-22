@@ -30,9 +30,13 @@ endif()
 # ── wire: GDB RSP stub (host proxy) ──────────────────────────────────────────
 add_executable(wire_host
   tools/wire/host/wire_host.c
-  tools/wire/host/wire_serial.c
+  $<TARGET_OBJECTS:wire_crash_lib>
 )
 target_compile_options(wire_host PRIVATE -Wall -Wextra -Werror -O2)
+target_include_directories(wire_host PRIVATE
+  ${CMAKE_CURRENT_LIST_DIR}/tools/wire/include
+  ${CMAKE_CURRENT_LIST_DIR}/tools/wire/host
+)
 set_target_properties(wire_host PROPERTIES
   OUTPUT_NAME "wire-host"
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

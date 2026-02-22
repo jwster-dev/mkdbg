@@ -20,6 +20,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-result"
 #define TB_IMPL
 #include "termbox2.h"
 #pragma GCC diagnostic pop
@@ -403,7 +404,7 @@ static void do_redraw(const SerialRing *ring, const GitState *gs,
     tb_print(sx, sy, TB_GREEN | TB_BOLD, TB_DEFAULT, "GIT");
     sy++;
     {
-      char tmp[64];
+      char tmp[128];
       snprintf(tmp, sizeof(tmp), "branch: %s", gs->branch);
       pclip(sx, sy, TB_WHITE, TB_DEFAULT, tmp, sw2);
       sy++;
