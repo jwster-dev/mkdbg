@@ -95,9 +95,13 @@ static const char *ring_get(const SerialRing *r, int from_bottom)
 /* ── git state ──────────────────────────────────────────────────────────── */
 
 typedef struct {
-  char   branch[96];  /* "main", "8ab1cd23 (detached)", "(unborn)", "--" */
-  int    dirty;       /* 0=clean  1=dirty  -1=unknown                   */
-  int    dirty_n;     /* number of changed files                        */
+  char   branch[96];   /* "main", "8ab1cd23 (detached)", "(unborn)", "--" */
+  int    dirty;        /* 0=clean  1=dirty  -1=unknown                    */
+  int    dirty_n;      /* number of changed files                         */
+  char   head_sha[12]; /* short SHA, e.g. "a1b2c3d4"                     */
+  char   head_msg[72]; /* first line of HEAD commit message               */
+  int    ahead;        /* commits ahead of upstream  (-1 = unknown)       */
+  int    behind;       /* commits behind upstream    (-1 = unknown)       */
   time_t refreshed;
 } GitState;
 
@@ -105,7 +109,9 @@ static void git_state_init(GitState *gs)
 {
   memset(gs, 0, sizeof(*gs));
   copy_string(gs->branch, sizeof(gs->branch), "--");
-  gs->dirty = -1;
+  gs->dirty  = -1;
+  gs->ahead  = -1;
+  gs->behind = -1;
 }
 
 #ifdef MKDBG_USE_LG2
@@ -124,16 +130,20 @@ static void refresh_git_lg2(GitState *gs, const char *root)
     goto done;
   }
 
-  /* Branch line */
+  /* Branch line + HEAD SHA + HEAD commit message */
+  gs->ahead  = -1;
+  gs->behind = -1;
+  gs->head_sha[0] = '\0';
+  gs->head_msg[0] = '\0';
+
   if (git_repository_head_unborn(repo)) {
     copy_string(gs->branch, sizeof(gs->branch), "(unborn)");
   } else if (git_repository_head_detached(repo)) {
     if (git_repository_head(&head, repo) == 0) {
       const git_oid *o = git_reference_target(head);
       if (o) {
-        char sha[GIT_OID_SHA1_HEXSIZE + 1];
-        git_oid_tostr(sha, sizeof(sha), o);
-        snprintf(gs->branch, sizeof(gs->branch), "%.8s (det)", sha);
+        git_oid_tostr(gs->head_sha, sizeof(gs->head_sha), o);
+        snprintf(gs->branch, sizeof(gs->branch), "%.8s (det)", gs->head_sha);
       } else {
         copy_string(gs->branch, sizeof(gs->branch), "(detached)");
       }
@@ -146,6 +156,45 @@ static void refresh_git_lg2(GitState *gs, const char *root)
     if (git_repository_head(&head, repo) == 0) {
       copy_string(gs->branch, sizeof(gs->branch),
                   git_reference_shorthand(head));
+
+      /* HEAD commit SHA + message */
+      {
+        const git_oid *head_oid = git_reference_target(head);
+        if (head_oid) {
+          git_commit *commit = NULL;
+          git_oid_tostr(gs->head_sha, sizeof(gs->head_sha), head_oid);
+          if (git_commit_lookup(&commit, repo, head_oid) == 0) {
+            const char *msg = git_commit_message(commit);
+            if (msg) {
+              /* copy only the first line */
+              const char *nl = strchr(msg, '\n');
+              size_t n = nl ? (size_t)(nl - msg) : strlen(msg);
+              if (n >= sizeof(gs->head_msg)) n = sizeof(gs->head_msg) - 1;
+              memcpy(gs->head_msg, msg, n);
+              gs->head_msg[n] = '\0';
+            }
+            git_commit_free(commit);
+          }
+
+          /* Ahead / behind relative to upstream */
+          {
+            git_reference *upstream = NULL;
+            if (git_branch_upstream(&upstream, head) == 0) {
+              const git_oid *up_oid = git_reference_target(upstream);
+              if (up_oid) {
+                size_t ahead_v = 0, behind_v = 0;
+                if (git_graph_ahead_behind(&ahead_v, &behind_v,
+                                           repo, head_oid, up_oid) == 0) {
+                  gs->ahead  = (int)ahead_v;
+                  gs->behind = (int)behind_v;
+                }
+              }
+              git_reference_free(upstream);
+            }
+          }
+        }
+      }
+
       git_reference_free(head);
       head = NULL;
     }
@@ -182,6 +231,11 @@ static void refresh_git_sub(GitState *gs, const char *root)
   char cmd[PATH_MAX + 128];
   FILE *f;
 
+  gs->ahead  = -1;
+  gs->behind = -1;
+  gs->head_sha[0] = '\0';
+  gs->head_msg[0] = '\0';
+
   /* branch */
   snprintf(cmd, sizeof(cmd),
            "git -C \"%s\" rev-parse --abbrev-ref HEAD 2>/dev/null", root);
@@ -196,6 +250,36 @@ static void refresh_git_sub(GitState *gs, const char *root)
     pclose(f);
   }
 
+  /* HEAD short sha */
+  snprintf(cmd, sizeof(cmd),
+           "git -C \"%s\" rev-parse --short=8 HEAD 2>/dev/null", root);
+  f = popen(cmd, "r");
+  if (f) {
+    char line[32] = {0};
+    if (fgets(line, (int)sizeof(line), f)) {
+      size_t n = strlen(line);
+      while (n > 0 && (line[n-1] == '\n' || line[n-1] == '\r')) line[--n] = '\0';
+      copy_string(gs->head_sha, sizeof(gs->head_sha), line);
+    }
+    pclose(f);
+  }
+
+  /* HEAD commit message (first line) */
+  snprintf(cmd, sizeof(cmd),
+           "git -C \"%s\" log -1 --format=%%s 2>/dev/null", root);
+  f = popen(cmd, "r");
+  if (f) {
+    char line[128] = {0};
+    if (fgets(line, (int)sizeof(line), f)) {
+      size_t n = strlen(line);
+      while (n > 0 && (line[n-1] == '\n' || line[n-1] == '\r')) line[--n] = '\0';
+      if (n >= sizeof(gs->head_msg)) n = sizeof(gs->head_msg) - 1;
+      memcpy(gs->head_msg, line, n);
+      gs->head_msg[n] = '\0';
+    }
+    pclose(f);
+  }
+
   /* dirty count */
   snprintf(cmd, sizeof(cmd),
            "git -C \"%s\" status --porcelain --untracked-files=no 2>/dev/null"
@@ -206,6 +290,20 @@ static void refresh_git_sub(GitState *gs, const char *root)
     if (fscanf(f, "%d", &cnt) == 1) {
       gs->dirty_n = cnt;
       gs->dirty   = cnt > 0 ? 1 : 0;
+    }
+    pclose(f);
+  }
+
+  /* ahead / behind */
+  snprintf(cmd, sizeof(cmd),
+           "git -C \"%s\" rev-list --left-right --count @{u}...HEAD 2>/dev/null",
+           root);
+  f = popen(cmd, "r");
+  if (f) {
+    int beh = 0, ahd = 0;
+    if (fscanf(f, "%d %d", &beh, &ahd) == 2) {
+      gs->behind = beh;
+      gs->ahead  = ahd;
     }
     pclose(f);
   }
@@ -403,12 +501,14 @@ static void do_redraw(const SerialRing *ring, const GitState *gs,
     /* GIT */
     tb_print(sx, sy, TB_GREEN | TB_BOLD, TB_DEFAULT, "GIT");
     sy++;
+    /* branch */
     {
       char tmp[128];
       snprintf(tmp, sizeof(tmp), "branch: %s", gs->branch);
       pclip(sx, sy, TB_WHITE, TB_DEFAULT, tmp, sw2);
       sy++;
     }
+    /* dirty status */
     if (gs->dirty < 0) {
       pclip(sx, sy, TB_WHITE, TB_DEFAULT, "status: --", sw2);
     } else if (gs->dirty == 0) {
@@ -419,6 +519,26 @@ static void do_redraw(const SerialRing *ring, const GitState *gs,
       pclip(sx, sy, TB_YELLOW, TB_DEFAULT, tmp, sw2);
     }
     sy++;
+    /* ahead / behind */
+    if (gs->ahead >= 0 || gs->behind >= 0) {
+      char tmp[48];
+      if (gs->ahead == 0 && gs->behind == 0) {
+        snprintf(tmp, sizeof(tmp), "up to date");
+        pclip(sx, sy, TB_GREEN, TB_DEFAULT, tmp, sw2);
+      } else {
+        snprintf(tmp, sizeof(tmp), "+%d / -%d", gs->ahead, gs->behind);
+        pclip(sx, sy, TB_YELLOW, TB_DEFAULT, tmp, sw2);
+      }
+      sy++;
+    }
+    /* HEAD commit */
+    if (gs->head_sha[0]) {
+      char tmp[128];
+      snprintf(tmp, sizeof(tmp), "%.8s %s", gs->head_sha, gs->head_msg);
+      pclip(sx, sy, TB_DEFAULT, TB_DEFAULT, tmp, sw2);
+      sy++;
+    }
+    /* refresh age */
     if (gs->refreshed > 0) {
       int age = (int)(time(NULL) - gs->refreshed);
       char tmp[32];
