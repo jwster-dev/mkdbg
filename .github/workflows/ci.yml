@@ -33,7 +33,7 @@ jobs:
             -DMKDBG_NATIVE_HOST_OS="${{ matrix.host_os }}" \
             -DMKDBG_NATIVE_HOST_ARCH="${{ matrix.host_arch }}"
           cmake --build build_host \
-            --target mkdbg_native_host wire_host -- -j3
+            --target mkdbg-native wire-host -- -j3
           mkdir -p build
           cp build_host/mkdbg-native \
              "build/mkdbg-native-${{ matrix.host_os }}-${{ matrix.host_arch }}"
@@ -43,6 +43,7 @@ jobs:
         run: |
           "build/mkdbg-native-${{ matrix.host_os }}-${{ matrix.host_arch }}" --version
           build/wire-host --version
+          build_host/seam-analyze --help
 
       - name: Upload Native Host Artifact
         uses: actions/upload-artifact@v4
@@ -78,12 +79,12 @@ jobs:
         run: bash tools/ci_install_arm_toolchain_ubuntu.sh
 
       - name: Run CI smoke
-        run: bash tools/ci_smoke.sh
+        run: bash scripts/ci_smoke.sh
 
       - name: Build native mkdbg host binary
         run: |
           cmake -S . -B build_host -DCMAKE_BUILD_TYPE=Release
-          cmake --build build_host --target mkdbg_native_host --parallel
+          cmake --build build_host --target mkdbg-native seam-analyze --parallel
 
       - name: Upload Smoke Artifacts
         if: always()
